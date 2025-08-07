@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Naptár Pro - Valós idejű adatokkal</title>
+    <meta name="description" content="Interaktív naptár valós idejű időjárás-el
+őrejelzéssel, holdfázisokkal, névnapokkal, jeles napokkal, évfordulókkal és csil
+lagászati adatokkal a világ bármely pontjára.">
+    <meta name="keywords" content="naptár, időjárás, holdfázis, névnap, jeles na
+pok, világnapok, csillagászat, óra, időzóna, Magyarország">
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awe
+some/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.cs
+s"/>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.mi
+n.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Robot
+o, sans-serif; min-height: 100vh; padding: 10px; transition: background 1s ease;
+ color: #333; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: gray
+scale; }
+        .morning { background: linear-gradient(135deg, #fff5b5 0%, #ffce45 100%)
+; }
+        .afternoon { background: linear-gradient(135deg, #87ceeb 0%, #4a90e2 100
+%); }
+        .evening { background: linear-gradient(135deg, #ff6b6b 0%, #4e54c8 100%)
+; }
+        .night { background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+color: #fff; }
+        .container { width: 100%; max-width: 1400px; margin: 0 auto; }
+        header, main, section, article { display: block; }
+        .location-bar { background: rgba(255, 255, 255, 0.9); border-radius: 20p
+x; padding: 10px 15px; margin-bottom: 15px; display: flex; align-items: center;
+gap: 10px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); backdrop-filter: blur(10px
+); flex-wrap: wrap; }
+        .night .location-bar { background: rgba(255, 255, 255, 0.1); color: #fff
+; }
+        .main-info { background: rgba(255, 255, 255, 0.9); border-radius: 20px;
+padding: 20px; margin-bottom: 15px; text-align: center; box-shadow: 0 8px 32px r
+gba(0, 0, 0, 0.1); backdrop-filter: blur(10px); }
+        .night .main-info { background: rgba(255, 255, 255, 0.1); }
+        .current-day { font-size: 1.8em; font-weight: 300; margin-bottom: 10px;
+}
+        .day-stats { display: flex; justify-content: center; gap: 15px; flex-wra
+p: wrap; margin-top: 15px; }
+        .stat-item { text-align: center; flex: 1 1 80px; }
+        .stat-value { font-size: 1.5em; font-weight: 600; color: #4a90e2; }
+        .night .stat-value { color: #87ceeb; }
+        .stat-label { font-size: 0.85em; opacity: 0.8; }
+        .timezone-details { font-size: 0.75em; color: #666; margin-top: 2px; lin
+e-height: 1.2; }
+        .night .timezone-details { color: #aaa; }
+        .main-section { display: grid; grid-template-columns: 1fr; gap: 15px; }
+        .info-card { background: rgba(255, 255, 255, 0.9); padding: 20px; border
+-radius: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); backdrop-filter: blur(
+10px); display: flex; flex-direction: column; }
+        .night .info-card { background: rgba(255, 255, 255, 0.1); }
+        .info-card h3 { margin-bottom: 15px; font-weight: 500; display: flex; al
+ign-items: center; gap: 10px; font-size: 1.1em; }
+        .weather-alert { background: #ff6b6b; color: white; padding: 15px; borde
+r-radius: 15px; margin-bottom: 15px; display: none; animation: pulse 2s infinite
+; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opaci
+ty: 1; } }
+        .weather-icon { font-size: 3em; margin: 10px 0; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); g
+ap: 2px; margin-top: 10px; }
+        .calendar-day { aspect-ratio: 1; display: flex; align-items: center; jus
+tify-content: center; border-radius: 5px; cursor: pointer; font-size: 0.9em; pad
+ding: 2px; background: rgba(0, 0, 0, 0.05); position: relative; min-height: 35px
+; }
+        .night .calendar-day { background: rgba(255, 255, 255, 0.05); }
+        .calendar-day:hover { background: rgba(74, 144, 226, 0.3); transform: sc
+ale(1.05); }
+        .calendar-day.holiday { background: rgba(255, 107, 107, 0.2); color: #e7
+4c3c; font-weight: bold; }
+        .calendar-day.sunday { color: #e74c3c; }
+        .calendar-day.today { background: #4a90e2; color: white; font-weight: bo
+ld; box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.5); }
+        .moon-visual { width: 150px; height: 150px; border-radius: 50%; margin:
+15px auto; position: relative; box-shadow: inset -10px -10px 20px rgba(0, 0, 0,
+0.1), 0 0 10px rgba(255, 255, 255, 0.3); overflow: hidden; background-color: #e0
+e0e0; }
+        .moon-phase-overlay { position: absolute; top: 0; left: 0; width: 100%;
+height: 100%; border-radius: 50%; transition: transform 0.5s ease-in-out; backgr
+ound-color: #2c2c2c; }
+        .world-clock-grid { display: grid; grid-template-columns: repeat(auto-fi
+t, minmax(120px, 1fr)); gap: 10px; margin-top: 20px; }
+        .time-zone-card { text-align: center; padding: 10px; background: rgba(0,
+ 0, 0, 0.05); border-radius: 10px; transition: transform 0.2s; font-size: 0.9em;
+ }
+        .night .time-zone-card { background: rgba(255, 255, 255, 0.05); }
+        .time-zone-card:hover { transform: translateY(-3px); }
+        .sun-icon { color: #ffce45; font-size: 1.5em; }
+        .moon-icon { color: #b8c6db; font-size: 1.5em; }
+        input, select, button { padding: 10px; border: 2px solid transparent; bo
+rder-radius: 10px; font-size: 14px; background: rgba(255, 255, 255, 0.8); transi
+tion: all 0.3s; width: 100%; max-width: 300px; }
+        .night input, .night select, .night button { background: rgba(255, 255,
+255, 0.1); color: #fff; }
+        input[type="date"] { max-width: 180px; }
+        input:focus, select:focus { outline: none; border-color: #4a90e2; }
+        button { background: #4a90e2; color: white; cursor: pointer; font-weight
+: 500; white-space: nowrap; }
+        button:hover { background: #357abd; transform: translateY(-2px); }
+        .earthquake-list { max-height: 400px; overflow-y: auto; overflow-x: hidd
+en; }
+        .earthquake-item { padding: 12px; margin: 8px 0; background: rgba(0, 0,
+0, 0.05); border-radius: 10px; display: flex; justify-content: space-between; al
+ign-items: center; transition: all 0.3s; gap: 10px; }
+        .night .earthquake-item { background: rgba(255, 255, 255, 0.05); }
+        .earthquake-item:hover { transform: translateX(3px); box-shadow: 0 5px 1
+5px rgba(0, 0, 0, 0.1); }
+        .magnitude { font-size: 1.3em; font-weight: bold; color: #ff6b6b; min-wi
+dth: 45px; }
+        .earthquake-location { flex: 1; overflow: hidden; text-overflow: ellipsi
+s; white-space: nowrap; font-size: 0.9em; word-break: break-word; }
+        .earthquake-time { font-size: 0.8em; opacity: 0.8; white-space: nowrap;
+}
+        .live-indicator { display: inline-flex; align-items: center; gap: 5px; b
+ackground: #ff4444; color: white; padding: 5px 12px; border-radius: 20px; font-s
+ize: 0.8em; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .aurora-meter { width: 100%; height: 30px; background: linear-gradient(t
+o right, #2ecc71 0%, #f1c40f 50%, #e74c3c 100%); border-radius: 15px; position:
+relative; margin: 20px 0; }
+        .aurora-indicator { position: absolute; top: -5px; width: 40px; height:
+40px; background: white; border-radius: 50%; box-shadow: 0 2px 10px rgba(0, 0, 0
+, 0.2); display: flex; align-items: center; justify-content: center; font-weight
+: bold; transition: left 0.5s; }
+        .aurora-forecast-table { width: 100%; margin-top: 15px; border-collapse:
+ collapse; font-size: 0.9em; }
+        .aurora-forecast-table th, .aurora-forecast-table td { padding: 8px; tex
+t-align: center; border: 1px solid rgba(0, 0, 0, 0.1); }
+        .night .aurora-forecast-table th, .night .aurora-forecast-table td { bor
+der-color: rgba(255, 255, 255, 0.1); }
+        .aurora-forecast-table th { background: rgba(0, 0, 0, 0.05); }
+        .night .aurora-forecast-table th { background: rgba(255, 255, 255, 0.05)
+; }
+        .countdown-grid { display: grid; grid-template-columns: repeat(auto-fit,
+ minmax(120px, 1fr)); gap: 10px; margin-top: 15px; }
+        .countdown-item { text-align: center; padding: 15px; background: rgba(0,
+ 0, 0, 0.05); border-radius: 10px; }
+        .night .countdown-item { background: rgba(255, 255, 255, 0.05); }
+        .countdown-number { font-size: 2em; font-weight: 300; color: #4a90e2; }
+        .night .countdown-number { color: #87ceeb; }
+        #radar-map { height: 300px; width: 100%; border-radius: 15px; overflow:
+hidden; }
+        .tooltip { position: absolute; background: rgba(0, 0, 0, 0.8); color: wh
+ite; padding: 10px 14px; border-radius: 6px; font-size: 0.95em; pointer-events:
+none; z-index: 1000; display: none; max-width: 250px; }
+        .weather-details { display: grid; grid-template-columns: repeat(auto-fit
+, minmax(150px, 1fr)); gap: 8px; margin-top: 15px; }
+        .weather-detail-item { display: flex; justify-content: space-between; pa
+dding: 6px 10px; background: rgba(0, 0, 0, 0.05); border-radius: 6px; font-size:
+ 0.9em; align-items: center; }
+        .night .weather-detail-item { background: rgba(255, 255, 255, 0.05); }
+        .weather-detail-label { display: flex; align-items: center; gap: 5px; }
+        .weather-detail-value { font-weight: 500; }
+        .nameday-info { padding: 10px; background: rgba(0, 0, 0, 0.05); border-r
+adius: 8px; margin-top: 10px; font-size: 0.9em; line-height: 1.4; max-height: 20
+0px; overflow-y: auto; }
+        .night .nameday-info { background: rgba(255, 255, 255, 0.05); }
+        .nameday-meaning {
+            margin-top: 10px;
+            padding: 12px;
+            background: rgba(74, 144, 226, 0.05);
+            border-left: 3px solid #4a90e2;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        .nameday-meaning strong {
+            font-weight: 600;
+            color: #357abd;
+        }
+        .night .nameday-meaning {
+            background: rgba(135, 206, 235, 0.08);
+            border-left-color: #87ceeb;
+        }
+        .night .nameday-meaning strong {
+            color: #87ceeb;
+        }
+        .nameday-meaning p {
+            margin: 5px 0 0 0;
+            opacity: 0.9;
+        }
+        #namedaySearchResult div { padding: 4px 0; }
+        .notable-days { margin-top: 10px; font-size: 0.9em; line-height: 1.5; }
+        .notable-day-item { padding: 5px 0; border-bottom: 1px solid rgba(0, 0,
+0, 0.1); }
+        .night .notable-day-item { border-color: rgba(255, 255, 255, 0.1); }
+        .notable-days-controls { display: flex; gap: 10px; align-items: center;
+margin-bottom: 15px; flex-wrap: wrap; }
+        .special-holidays-search { margin-top: 15px; }
+        .search-results { margin-top: 10px; max-height: 300px; overflow-y: auto;
+ }
+        .search-result-item { padding: 10px; margin: 5px 0; background: rgba(0,
+0, 0, 0.05); border-radius: 8px; border-left: 4px solid #4a90e2; }
+        .night .search-result-item { background: rgba(255, 255, 255, 0.05); }
+        .holiday-match { background: rgba(74, 144, 226, 0.1); border: 1px solid
+#4a90e2; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
+        .holiday-match p { word-break: break-word; }
+        .holiday-match-title { font-weight: bold; color: #357abd; display: block
+; margin-bottom: 5px; }
+        .night .holiday-match-title { color: #87ceeb; }
+        .source-link { text-align: right; margin-top: 10px; font-size: 0.85em; }
+        .source-link a { color: #4a90e2; text-decoration: none; }
+        .source-link a:hover { text-decoration: underline; }
+        .sun-scale { width: 100%; height: 60px; border-radius: 30px; overflow: h
+idden; position: relative; margin: 20px 0; background: linear-gradient(to right,
+ #1a1a2e 0%, #1a1a2e 100%); }
+        .sun-position { position: absolute; top: 50%; transform: translate(-50%,
+ -50%); font-size: 24px; transition: left 0.5s; z-index: 3; }
+        .sun-scale-markers { position: absolute; width: 100%; height: 100%; top:
+ 0; }
+        .time-marker { position: absolute; width: 2px; height: 100%; top: 0; tra
+nsform: translateX(-50%); }
+        .sunrise-marker, .sunset-marker { background: rgba(255, 255, 255, 0.8);
+}
+        .noon-marker { background: rgba(255, 100, 100, 0.6); width: 1px; }
+        .sun-scale-labels { display: flex; justify-content: space-between; margi
+n-top: 5px; font-size: 0.8em; }
+        .visually-hidden { position:absolute; width:1px; height:1px; margin:-1px
+; padding:0; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+        @media (min-width: 768px) {
+            body { padding: 20px; } .location-bar { padding: 15px 25px; } .main-
+info { padding: 30px; } .current-day { font-size: 2.5em; }
+            .stat-value { font-size: 2em; } .main-section { grid-template-column
+s: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+            .info-card { padding: 25px; } .info-card h3 { font-size: 1.2em; } .c
+alendar-day { min-height: 60px; }
+            #radar-map { height: 400px; } input, select, button { font-size: 16p
+x; }
+        }
+        @media (max-width: 767px) {
+            .location-bar { justify-content: center; } .location-bar > * { flex:
+ 1 1 100%; text-align: center; }
+            .day-stats { gap: 10px; } .world-clock-grid { grid-template-columns:
+ repeat(2, 1fr); }
+            .calendar-grid { font-size: 0.7em; } .notable-days-controls { flex-d
+irection: column; align-items: stretch; }
+            .notable-days-controls > * { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <header class="location-bar">
+        <i class="fas fa-map-marker-alt"></i><span id="currentLocation">Betöltés
+...</span>
+        <input type="text" id="locationInput" placeholder="Új helyszín..."><butt
+on onclick="updateLocation()" aria-label="Helyszín frissítése"><i class="fas fa-
+search"></i> Frissít</button>
+        <button onclick="getCurrentLocation()" aria-label="Saját helyzet meghat
+ározása"><i class="fas fa-location-crosshairs"></i> Saját helyzet</button>
+    </header>
+    <div class="container">
+        <div class="weather-alert" id="weatherAlert"><i class="fas fa-exclamatio
+n-triangle"></i> <span id="alertText"></span></div>
+        <section class="main-info" aria-labelledby="main-info-heading">
+            <h1 id="main-info-heading" class="visually-hidden">Aktuális Dátum és
+ Idő Információk</h1>
+            <div class="current-day" id="currentDayInfo"></div>
+            <div class="main-clock" id="mainClock" style="font-size: 3em; font-w
+eight: 200; margin: 10px 0;"></div>
+            <div id="mainTimezone" style="font-size: 0.5em; color: #888; margin-
+top: -15px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5p
+x;"></div>
+            <div class="day-stats">
+                <div class="stat-item"><div class="stat-value" id="dayOfYear"></
+div><div class="stat-label">nap az évből</div></div>
+                <div class="stat-item"><div class="stat-value" id="daysRemaining
+"></div><div class="stat-label">nap van hátra</div></div>
+                <div class="stat-item"><div class="stat-value" id="weekNumber"><
+/div><div class="stat-label">hét</div></div>
+                <div class="stat-item"><div class="stat-value" id="timeZoneType"
+></div><div class="stat-label">időszámítás<div class="timezone-details" id="time
+zoneDetails"></div></div></div>
+            </div>
+        </section>
+        <main class="main-section">
+            <article class="info-card">
+                <h3><i class="fas fa-cloud-sun"></i> Időjárás <span class="live-
+indicator"><i class="fas fa-circle"></i> ÉLŐ</span></h3>
+                <div id="weatherLoading" style="text-align: center;"><i class="f
+as fa-spinner fa-spin" style="font-size: 2em;"></i><p>Időjárás betöltése...</p><
+/div>
+                <div id="weatherContent" style="display: none;">
+                    <div style="text-align: center;">
+                        <div class="weather-icon" id="currentWeatherIcon"></div>
+<div style="font-size: 2em; margin: 10px 0;" id="currentTemp"></div>
+                        <div id="currentCondition"></div><div id="feelsLike" sty
+le="margin-top: 10px;"></div>
+                    </div>
+                    <div class="weather-details" id="weatherDetails"></div>
+                    <div style="margin-top: 20px;"><h4>3 napos előrejelzés</h4><
+div id="forecast" style="display: grid; grid-template-columns: repeat(3, 1fr); g
+ap: 10px; margin-top: 10px;"></div></div>
+                </div>
+            </article>
+            <section class="info-card">
+                <h3><i class="fas fa-gift"></i> Névnapok</h3>
+                <p><strong>Ma:</strong> <span id="todayNameday">Betöltés...</spa
+n></p><p style="margin-bottom: 15px;"><strong>Holnap:</strong> <span id="tomorro
+wNameday">Betöltés...</span></p>
+                <div id="namedayInfo"></div><input type="search" id="namedaySear
+ch" placeholder="Keress névnapra..." style="width: 100%; margin-top: 15px;"><div
+ id="namedaySearchResult" style="margin-top: 10px;"></div>
+            </section>
+            <section class="info-card">
+                <h3><i class="fas fa-calendar-check"></i> Jeles napok és Világna
+pok</h3>
+                <div class="notable-days-controls">
+                    <button onclick="changeNotableDay(-1)" aria-label="Előző nap
+"><i class="fas fa-chevron-left"></i></button>
+                    <input type="date" id="notableDatePicker" onchange="goToNota
+bleDate()" aria-label="Dátumválasztó jeles napokhoz"><button onclick="goToNotabl
+eToday()">Mai nap</button>
+                    <button onclick="changeNotableDay(1)" aria-label="Következő
+nap"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <div id="currentDayHolidays" style="margin-bottom: 15px;"></div>
+                <div class="special-holidays-search"><input type="search" id="sp
+ecialHolidaySearch" placeholder="Keress jeles napra..." style="width: 100%;"><di
+v id="specialHolidayResults" class="search-results"></div></div>
+                <div class="source-link" style="margin-top: auto; padding-top: 1
+5px;">Forrás: Nyílt adatbázisok</div>
+            </section>
+            <article class="info-card">
+                <h3><i class="fas fa-history"></i> Évfordulók <span id="annivers
+aryCountry" style="font-size: 0.8em; opacity: 0.7;"></span></h3>
+                <div id="anniversaryContent" style="max-height: 400px; overflow-
+y: auto; flex-grow: 1;"><div style="text-align: center;"><i class="fas fa-spinne
+r fa-spin"></i> Betöltés...</div></div>
+                <div class="source-link" style="margin-top: auto; padding-top: 1
+5px;"><a href="#" id="anniversaryWikiLink" target="_blank" rel="noopener norefer
+rer"><i class="fab fa-wikipedia-w"></i> Forrás: Wikipédia</a></div>
+            </article>
+            <section class="info-card">
+                <h3><i class="fas fa-calendar"></i> Havi naptár</h3>
+                <div style="display: flex; justify-content: space-between; align
+-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                    <h4 id="calendarMonthYear"></h4>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align
+-items: center;">
+                        <select id="countrySelect" aria-label="Országválasztás">
+</select>
+                        <div style="display: flex; gap: 5px;">
+                            <button onclick="changeMonth(-1)" aria-label="Előző
+hónap"><i class="fas fa-chevron-left"></i></button>
+                            <button onclick="goToToday()">Mai nap</button><butto
+n onclick="changeMonth(1)" aria-label="Következő hónap"><i class="fas fa-chevron
+-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="calendar-grid" id="calendarGrid"></div><div id="long
+Weekends" style="margin-top: 20px;"></div>
+            </section>
+            <article class="info-card">
+                <h3><i class="fas fa-moon"></i> Holdfázis</h3>
+                <div class="moon-visual" id="moonVisual">
+                    <div class="moon-phase-overlay" id="moonPhaseOverlay"></div>
+                </div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <div style="font-size: 1.2em; font-weight: 500;" id="moonPha
+seName"></div>
+                    <div id="moonPhasePercent" style="margin-top: 10px;"></div>
+                    <div style="margin-top: 5px;"><i class="fas fa-moon"></i> Ho
+ld: <span id="moonZodiac"></span></div>
+                    <div style="margin-top: 5px;"><i class="fas fa-sun"></i> Nap
+: <span id="sunZodiac"></span></div>
+                    <div id="moonLocationNote" style="margin-top: 10px; font-siz
+e: 0.85em; opacity: 0.7;"></div>
+                </div>
+            </article>
+            <article class="info-card">
+                <h3><i class="fas fa-sun"></i> Nap és Hold</h3>
+                <div class="sun-scale" id="sunScale"><div class="sun-scale-marke
+rs" id="sunScaleMarkers"></div><div class="sun-position" id="sunPosition">☀️</di
+v></div>
+                <div class="sun-scale-labels"><span id="sunriseTime">--:--</span
+><span>Dél</span><span id="sunsetTime">--:--</span></div>
+                <div id="sunMoonTimes" style="margin-top: 20px;"><div style="tex
+t-align: center;"><i class="fas fa-spinner fa-spin"></i> Adatok betöltése...</di
+v></div>
+            </section>
+            <section class="info-card">
+                <h3><i class="fas fa-cloud-rain"></i> Csapadék radar</h3>
+                <div id="radarControls" style="text-align: center; margin-bottom
+: 10px;"><button id="playRadar" onclick="toggleRadarAnimation()" aria-label="Rad
+ar animáció"><i class="fas fa-play"></i> Lejátszás</button></div>
+                <div id="radar-map"></div><div id="radarTime" style="text-align:
+ center; margin-top: 10px; font-weight: bold;"></div>
+            </section>
+            <section class="info-card">
+                <h3><i class="fas fa-globe"></i> Világidők</h3>
+                <div class="world-clock-grid">
+                    <div class="time-zone-card"><strong>Los Angeles</strong><div
+ id="timeLosAngeles"></div></div><div class="time-zone-card"><strong>New York</s
+trong><div id="timeNewYork"></div></div>
+                    <div class="time-zone-card"><strong>London</strong><div id="
+timeLondon"></div></div><div class="time-zone-card"><strong>Moszkva</strong><div
+ id="timeMoscow"></div></div>
+                    <div class="time-zone-card"><strong>Dubai</strong><div id="t
+imeDubai"></div></div><div class="time-zone-card"><strong>Hong Kong</strong><div
+ id="timeHongKong"></div></div>
+                    <div class="time-zone-card"><strong>Tokyo</strong><div id="t
+imeTokyo"></div></div><div class="time-zone-card"><strong>Sydney</strong><div id
+="timeSydney"></div></div>
+                </div>
+            </section>
+            <article class="info-card">
+                <h3><i class="fas fa-globe-americas"></i> Földrengések <span cla
+ss="live-indicator"><i class="fas fa-circle"></i> ÉLŐ</span></h3>
+                <div id="earthquakeTimer" style="text-align: center; font-size:
+1.2em; margin-bottom: 15px; font-weight: bold;"></div>
+                <div class="earthquake-list" id="earthquakeList"><div style="tex
+t-align: center;"><i class="fas fa-spinner fa-spin"></i> Betöltés...</div></div>
+            </article>
+            <article class="info-card">
+                <h3><i class="fas fa-star"></i> Északi fény előrejelzés</h3>
+                <div class="aurora-meter"><div class="aurora-indicator" id="auro
+raIndicator"><span id="kpValue">0</span></div></div>
+                <div style="text-align: center; margin-top: 10px;"><strong>KP In
+dex: <span id="kpIndex">0</span>/9</strong><div id="auroraLocation" style="margi
+n-top: 5px; font-size: 0.9em;"></div><div id="auroraVisibility" style="margin-to
+p: 10px;"></div></div>
+                <table class="aurora-forecast-table"><thead><tr><th>Időpont</th>
+<th>KP Index</th><th>Láthatóság</th></tr></thead><tbody id="auroraForecastTable"
+><tr><td colspan="3">Betöltés...</td></tr></tbody></table>
+            </article>
+            <section class="info-card">
+                <h3><i class="fas fa-hourglass-half"></i> Visszaszámlálás</h3>
+                <div class="countdown-grid">
+                    <div class="countdown-item"><div class="countdown-number" id
+="daysToEaster"></div><div>nap Húsvétig</div></div>
+                    <div class="countdown-item"><div class="countdown-number" id
+="daysToChristmas"></div><div>nap Karácsonyig</div></div>
+                    <div class="countdown-item"><div class="countdown-number" id
+="daysToNewYear"></div><div>nap Újévig</div></div>
+                    <div class="countdown-item"><div class="countdown-number" id
+="daysToDST"></div><div id="dstLabel"></div></div>
+                    <div class="countdown-item"><div class="countdown-number" id
+="daysToNextSeason"></div><div id="nextSeasonLabel"></div></div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // Globális változók
+        let userLat = 47.4979, userLon = 19.0402, userLocation = "Budapest", use
+rCountry = "HU";
+        let currentCalendarDate = new Date();
+        let selectedCountry = 'HU';
+        let radarMap = null, radarLayers = [], radarAnimationTimer = null, radar
+AnimationPosition = 0, isRadarPlaying = false;
+        let earthquakeUpdateTimer = null, mostRecentEarthquakeTime = null;
+        let weatherData = null;
+        let holidaysCache = {}, longWeekendsCache = {};
+        let availableCountries = [];
+        let currentLocationMarker = null;
+        let currentNotableDate = new Date();
+        // JAVÍTVA: A hiányzó változó deklarálása
+        let sunUpdateInterval = null;
+
+        const extendedCountries = [ { countryCode: 'HU', name: 'Magyarország' },
+ { countryCode: 'AD', name: 'Andorra' }, { countryCode: 'AE', name: 'Egyesült Ar
+ab Emírségek' }, { countryCode: 'AF', name: 'Afganisztán' }, { countryCode: 'AG'
+, name: 'Antigua és Barbuda' }, { countryCode: 'AI', name: 'Anguilla' }, { count
+ryCode: 'AL', name: 'Albánia' }, { countryCode: 'AM', name: 'Örményország' }, {
+countryCode: 'AO', name: 'Angola' }, { countryCode: 'AQ', name: 'Antarktisz' },
+{ countryCode: 'AR', name: 'Argentína' }, { countryCode: 'AS', name: 'Amerikai S
+zamoa' }, { countryCode: 'AT', name: 'Ausztria' }, { countryCode: 'AU', name: 'A
+usztrália' }, { countryCode: 'AW', name: 'Aruba' }, { countryCode: 'AX', name: '
+Åland-szigetek' }, { countryCode: 'AZ', name: 'Azerbajdzsán' }, { countryCode: '
+BA', name: 'Bosznia-Hercegovina' }, { countryCode: 'BB', name: 'Barbados' }, { c
+ountryCode: 'BD', name: 'Banglades' }, { countryCode: 'BE', name: 'Belgium' }, {
+ countryCode: 'BF', name: 'Burkina Faso' }, { countryCode: 'BG', name: 'Bulgária
+' }, { countryCode: 'BH', name: 'Bahrein' }, { countryCode: 'BI', name: 'Burundi
+' }, { countryCode: 'BJ', name: 'Benin' }, { countryCode: 'BL', name: 'Saint-Bar
+thélemy' }, { countryCode: 'BM', name: 'Bermuda' }, { countryCode: 'BN', name: '
+Brunei' }, { countryCode: 'BO', name: 'Bolívia' }, { countryCode: 'BR', name: 'B
+razília' }, { countryCode: 'BS', name: 'Bahama-szigetek' }, { countryCode: 'BT',
+ name: 'Bhután' }, { countryCode: 'BW', name: 'Botswana' }, { countryCode: 'BY',
+ name: 'Belarusz' }, { countryCode: 'BZ', name: 'Belize' }, { countryCode: 'CA',
+ name: 'Kanada' }, { countryCode: 'CD', name: 'Kongói Demokratikus Köztársaság'
+}, { countryCode: 'CF', name: 'Közép-afrikai Köztársaság' }, { countryCode: 'CG'
+, name: 'Kongó' }, { countryCode: 'CH', name: 'Svájc' }, { countryCode: 'CI', na
+me: 'Elefántcsontpart' }, { countryCode: 'CL', name: 'Chile' }, { countryCode: '
+CM', name: 'Kamerun' }, { countryCode: 'CN', name: 'Kína' }, { countryCode: 'CO'
+, name: 'Kolumbia' }, { countryCode: 'CR', name: 'Costa Rica' }, { countryCode:
+'CU', name: 'Kuba' }, { countryCode: 'CV', name: 'Zöld-foki Köztársaság' }, { co
+untryCode: 'CW', name: 'Curaçao' }, { countryCode: 'CY', name: 'Ciprus' }, { cou
+ntryCode: 'CZ', name: 'Csehország' }, { countryCode: 'DE', name: 'Németország' }
+, { countryCode: 'DK', name: 'Dánia' }, { countryCode: 'DO', name: 'Dominikai K
+öztársaság' }, { countryCode: 'DZ', name: 'Algéria' }, { countryCode: 'EC', name
+: 'Ecuador' }, { countryCode: 'EE', name: 'Észtország' }, { countryCode: 'EG', n
+ame: 'Egyiptom' }, { countryCode: 'ES', name: 'Spanyolország' }, { countryCode:
+'ET', name: 'Etiópia' }, { countryCode: 'FI', name: 'Finnország' }, { countryCod
+e: 'FR', name: 'Franciaország' }, { countryCode: 'GA', name: 'Gabon' }, { countr
+yCode: 'GB', name: 'Egyesült Királyság' }, { countryCode: 'GE', name: 'Grúzia' }
+, { countryCode: 'GH', name: 'Ghána' }, { countryCode: 'GR', name: 'Görögország'
+ }, { countryCode: 'GT', name: 'Guatemala' }, { countryCode: 'HK', name: 'Hongko
+ng' }, { countryCode: 'HN', name: 'Honduras' }, { countryCode: 'HR', name: 'Horv
+átország' }, { countryCode: 'HT', name: 'Haiti' }, { countryCode: 'ID', name: 'I
+ndonézia' }, { countryCode: 'IE', name: 'Írország' }, { countryCode: 'IL', name:
+ 'Izrael' }, { countryCode: 'IN', name: 'India' }, { countryCode: 'IQ', name: 'I
+rak' }, { countryCode: 'IR', name: 'Irán' }, { countryCode: 'IS', name: 'Izland'
+ }, { countryCode: 'IT', name: 'Olaszország' }, { countryCode: 'JM', name: 'Jama
+ica' }, { countryCode: 'JO', name: 'Jordánia' }, { countryCode: 'JP', name: 'Jap
+án' }, { countryCode: 'KE', name: 'Kenya' }, { countryCode: 'KG', name: 'Kirgizi
+sztán' }, { countryCode: 'KH', name: 'Kambodzsa' }, { countryCode: 'KR', name: '
+Dél-Korea' }, { countryCode: 'KW', name: 'Kuvait' }, { countryCode: 'KZ', name:
+'Kazahsztán' }, { countryCode: 'LA', name: 'Laosz' }, { countryCode: 'LB', name:
+ 'Libanon' }, { countryCode: 'LI', name: 'Liechtenstein' }, { countryCode: 'LK',
+ name: 'Srí Lanka' }, { countryCode: 'LR', name: 'Libéria' }, { countryCode: 'LS
+', name: 'Lesotho' }, { countryCode: 'LT', name: 'Litvánia' }, { countryCode: 'L
+U', name: 'Luxemburg' }, { countryCode: 'LV', name: 'Lettország' }, { countryCod
+e: 'LY', name: 'Líbia' }, { countryCode: 'MA', name: 'Marokkó' }, { countryCode:
+ 'MC', name: 'Monaco' }, { countryCode: 'MD', name: 'Moldova' }, { countryCode:
+'ME', name: 'Montenegró' }, { countryCode: 'MG', name: 'Madagaszkár' }, { countr
+yCode: 'MK', name: 'Észak-Macedónia' }, { countryCode: 'ML', name: 'Mali' }, { c
+ountryCode: 'MM', name: 'Mianmar' }, { countryCode: 'MN', name: 'Mongólia' }, {
+countryCode: 'MT', name: 'Málta' }, { countryCode: 'MU', name: 'Mauritius' }, {
+countryCode: 'MV', name: 'Maldív-szigetek' }, { countryCode: 'MW', name: 'Malawi
+' }, { countryCode: 'MX', name: 'Mexikó' }, { countryCode: 'MY', name: 'Malajzia
+' }, { countryCode: 'MZ', name: 'Mozambik' }, { countryCode: 'NA', name: 'Namíbi
+a' }, { countryCode: 'NE', name: 'Niger' }, { countryCode: 'NG', name: 'Nigéria'
+ }, { countryCode: 'NI', name: 'Nicaragua' }, { countryCode: 'NL', name: 'Hollan
+dia' }, { countryCode: 'NO', name: 'Norvégia' }, { countryCode: 'NP', name: 'Nep
+ál' }, { countryCode: 'NZ', name: 'Új-Zéland' }, { countryCode: 'PA', name: 'Pan
+ama' }, { countryCode: 'PE', name: 'Peru' }, { countryCode: 'PG', name: 'Pápua
+Új-Guinea' }, { countryCode: 'PH', name: 'Fülöp-szigetek' }, { countryCode: 'PK'
+, name: 'Pakisztán' }, { countryCode: 'PL', name: 'Lengyelország' }, { countryCo
+de: 'PR', name: 'Puerto Rico' }, { countryCode: 'PS', name: 'Palesztina' }, { co
+untryCode: 'PT', name: 'Portugália' }, { countryCode: 'PY', name: 'Paraguay' },
+{ countryCode: 'QA', name: 'Katar' }, { countryCode: 'RO', name: 'Románia' }, {
+countryCode: 'RS', name: 'Szerbia' }, { countryCode: 'RU', 'name': 'Oroszország'
+ }, { countryCode: 'RW', name: 'Ruanda' }, { countryCode: 'SA', name: 'Szaúd-Ar
+ábia' }, { countryCode: 'SC', name: 'Seychelle-szigetek' }, { countryCode: 'SD',
+ name: 'Szudán' }, { countryCode: 'SE', name: 'Svédország' }, { countryCode: 'SG
+', name: 'Szingapúr' }, { countryCode: 'SI', name: 'Szlovénia' }, { countryCode:
+ 'SK', name: 'Szlovákia' }, { countryCode: 'SL', name: 'Sierra Leone' }, { count
+ryCode: 'SM', name: 'San Marino' }, { countryCode: 'SN', name: 'Szenegál' }, { c
+ountryCode: 'SO', name: 'Szomália' }, { countryCode: 'SR', name: 'Suriname' }, {
+ countryCode: 'SS', name: 'Dél-Szudán' }, { countryCode: 'SV', name: 'Salvador'
+}, { countryCode: 'SY', name: 'Szíria' }, { countryCode: 'SZ', name: 'Szváziföld
+' }, { countryCode: 'TD', name: 'Csád' }, { countryCode: 'TG', name: 'Togo' }, {
+ countryCode: 'TH', name: 'Thaiföld' }, { countryCode: 'TJ', name: 'Tádzsikiszt
+án' }, { countryCode: 'TM', name: 'Türkmenisztán' }, { countryCode: 'TN', name:
+'Tunézia' }, { countryCode: 'TO', name: 'Tonga' }, { countryCode: 'TR', name: 'T
+örökország' }, { countryCode: 'TT', name: 'Trinidad és Tobago' }, { countryCode:
+ 'TW', name: 'Tajvan' }, { countryCode: 'TZ', name: 'Tanzánia' }, { countryCode:
+ 'UA', name: 'Ukrajna' }, { countryCode: 'UG', name: 'Uganda' }, { countryCode:
+'US', name: 'Egyesült Államok' }, { countryCode: 'UY', name: 'Uruguay' }, { coun
+tryCode: 'UZ', name: 'Üzbegisztán' }, { countryCode: 'VA', name: 'Vatikán' }, {
+countryCode: 'VE', name: 'Venezuela' }, { countryCode: 'VN', name: 'Vietnám' },
+{ countryCode: 'YE', name: 'Jemen' }, { countryCode: 'ZA', name: 'Dél-Afrika' },
+ { countryCode: 'ZM', name: 'Zambia' }, { countryCode: 'ZW', name: 'Zimbabwe' }]
+;
+        const specialHolidays = { 'a magyar kultúra napja': { date: '01-22', des
+cription: 'A Himnusz befejezésének évfordulója.' }, 'a holokauszt nemzetközi eml
+éknapja': { date: '01-27', description: 'Az auschwitzi koncentrációs tábor felsz
+abadításának napja.' }, 'a vizes élőhelyek világnapja': { date: '02-02', descrip
+tion: 'A Rámszari Egyezmény aláírásának napja.' }, 'a rákellenes világnap': { da
+te: '02-04', description: 'Nemzetközi nap a rákbetegség elleni küzdelemért.' },
+'az anyanyelv nemzetközi napja': { date: '02-21', description: 'Az UNESCO által
+a nyelvi sokszínűségért létrehozott nap.' }, 'a kommunista diktatúrák áldozatain
+ak emléknapja': { date: '02-25', description: 'Kovács Béla, kisgazda politikus e
+lhurcolásának napja.' }, 'nemzetközi nőnap': { date: '03-08', description: 'A n
+ők jogai és a nemzetközi béke napja.' },'a víz világnapja': { date: '03-22', des
+cription: 'Az ENSZ által a tiszta víz fontosságára fókuszáló nap.' },'színházi v
+ilágnap': { date: '03-27', description: 'Nemzetközi nap a színházművészet ünnepl
+ésére.' }, 'az autizmus világnapja': { date: '04-02', description: 'Az ENSZ álta
+l az autizmussal élők helyzetére fókuszáló nap.' }, 'egészségügyi világnap': { d
+ate: '04-07', description: 'A WHO alapításának évfordulója.' }, 'a magyar költés
+zet napja': { date: '04-11', description: 'József Attila születésnapja.' }, 'a h
+olokauszt magyarországi áldozatainak emléknapja': { date: '04-16', description:
+'A budapesti gettó felállításának évfordulója.' }, 'a föld napja': { date: '04-2
+2', description: 'Világméretű környezetvédelmi mozgalom napja.' }, 'a tánc világ
+napja': { date: '04-29', description: 'Jean-Georges Noverre, a klasszikus balett
+ megújítójának születésnapja.' }, 'a sajtószabadság világnapja': { date: '05-03'
+, description: 'Az UNESCO által a sajtószabadság fontosságára fókuszáló nap.' },
+ 'madarak és fák napja': { date: '05-10', description: 'Herman Ottó kezdeményez
+ésére indult természetvédelmi nap.' }, 'a nemzetközi családnap': { date: '05-15'
+, description: 'Az ENSZ által a családok fontosságára fókuszáló nap.' }, 'a nemz
+eti összetartozás napja': { date: '06-04', description: 'A trianoni békeszerződ
+és aláírásának évfordulója.' }, 'környezetvédelmi világnap': { date: '06-05', de
+scription: 'Az ENSZ által a környezetvédelemért indított nap.' }, 'a menekültek
+világnapja': { date: '06-20', description: 'Az ENSZ által a menekültek helyzetér
+e fókuszáló nap.' }, 'a zene ünnepe': { date: '06-21', description: 'Nemzetközi
+nap, ahol a zenét és zenészeket ünneplik.' }, 'a magyar egészségügy napja': { da
+te: '07-01', description: 'Semmelweis Ignác születésnapja.' }, 'a barátság világ
+napja': { date: '07-30', description: 'Nemzetközi nap a barátság ünneplésére.' }
+, 'a roma holokauszt emléknapja': { date: '08-02', description: 'Az auschwitzi c
+igány láger felszámolásának emléknapja.' }, 'az állatkertek napja': { date: '08-
+09', description: 'A budapesti állatkert megnyitásának évfordulója.' }, 'az ifj
+úság nemzetközi napja': { date: '08-12', description: 'Az ENSZ által a fiatalok
+szerepére fókuszáló nap.' }, 'az európai emléknap': { date: '08-23', description
+: 'A totalitárius diktatúrák áldozatainak európai emléknapja.' },'a béke nemzetk
+özi napja': { date: '09-21', description: 'Az ENSZ által a globális fegyverszüne
+tre és erőszakmentességre felhívó nap.' },'a magyar dráma napja': { date: '09-21
+', description: 'Madách Imre "Az ember tragédiája" c. művének ősbemutatója.' },'
+turizmus világnapja': { date: '09-27', description: 'A turizmus kulturális és ga
+zdasági jelentőségét ünneplő nap.' },'a zene világnapja': { date: '10-01', descr
+iption: 'Yehudi Menuhin kezdeményezésére indult nemzetközi ünnep.' },'az állatok
+ világnapja': { date: '10-04', description: 'Assisi Szent Ferenc, az állatok véd
+őszentjének emléknapja.' },'az aradi vértanúk emléknapja': { date: '10-06', desc
+ription: 'Nemzeti gyásznap.' },'a látás világnapja': { date: '10-10', descriptio
+n: 'A vakság és a látásromlás megelőzésére hívja fel a figyelmet.' },'az élelmez
+ési világnap': { date: '10-16', description: 'A FAO alapításának napja, az éhez
+és elleni küzdelemért.' },'a magyar zászló és címer napja': { date: '10-23', des
+cription: 'Az 1956-os forradalom és szabadságharc emléknapja.' },'a magyar tudom
+ány ünnepe': { date: '11-03', description: 'Széchenyi István által a Tudományos
+Akadémia alapításának napja.' },'a magyar nyelv napja': { date: '11-13', descrip
+tion: 'Az 1844-es országgyűlésen a magyar nyelv hivatalossá tételének napja.' },
+'az emberi jogok napja': { date: '12-10', description: 'Az Emberi Jogok Egyeteme
+s Nyilatkozatának elfogadásának napja.' }, 'anyák napja': { description: 'Anyák
+napja - május első vasárnapján ünnepeljük', calculateDate: (year) => { const d =
+ new Date(year, 4, 1); d.setDate(1 + (7 - d.getDay() + 7) % 7); return d; } }, '
+pedagógusnap': { description: 'Pedagógusnap - június első vasárnapján ünnepeljük
+', calculateDate: (year) => { const d = new Date(year, 5, 1); d.setDate(1 + (7 -
+ d.getDay() + 7) % 7); return d; } }, 'apák napja': { description: 'Apák napja -
+ június harmadik vasárnapján ünnepeljük', calculateDate: (year) => { const d = n
+ew Date(year, 5, 1); d.setDate(1 + (7 - d.getDay() + 7) % 7 + 14); return d; } }
+, 'húsvétvasárnap': { description: 'Húsvétvasárnap - a kereszténység legnagyobb
+ünnepe.', calculateDate: (year) => calculateEaster(year) }, 'húsvéthétfő': { des
+cription: 'Húsvéthétfő - Húsvét másodnapja, munkaszüneti nap.', calculateDate: (
+year) => { const d = calculateEaster(year); d.setUTCDate(d.getUTCDate() + 1); re
+turn d; } }, 'pünkösdvasárnap': { description: 'Pünkösdvasárnap - a Szentlélek e
+ljövetelének ünnepe.', calculateDate: (year) => { const d = calculateEaster(year
+); d.setUTCDate(d.getUTCDate() + 49); return d; } }, 'pünkösdhétfő': { descripti
+on: 'Pünkösdhétfő - Pünkösd másodnapja, munkaszüneti nap.', calculateDate: (year
+) => { const d = calculateEaster(year); d.setUTCDate(d.getUTCDate() + 50); retur
+n d; } }, };
+        const namedays = { '01-01':['Fruzsina','Újév'],'01-02':['Ábel','Gergely'
+],'01-03':['Genovéva','Benjámin'],'01-04':['Titusz','Leona'],'01-05':['Simon'],'
+01-06':['Boldizsár','Vízkereszt'],'01-07':['Attila','Ramóna'],'01-08':['Gyöngyv
+ér'],'01-09':['Marcell'],'01-10':['Melánia'],'01-11':['Ágota'],'01-12':['Ernő'],
+'01-13':['Veronika'],'01-14':['Bódog'],'01-15':['Lóránt','Loránd'],'01-16':['Gus
+ztáv'],'01-17':['Antal','Antónia'],'01-18':['Piroska'],'01-19':['Sára','Márió'],
+'01-20':['Fábián','Sebestyén'],'01-21':['Ágnes'],'01-22':['Vince','Artúr'],'01-2
+3':['Zelma','Rajmund'],'01-24':['Timót','Xénia'],'01-25':['Pál'],'01-26':['Vanda
+','Paula'],'01-27':['Angelika'],'01-28':['Károly','Karola'],'01-29':['Adél'],'01
+-30':['Gerda','Martina'],'01-31':['Marcella'],'02-01':['Ignác'],'02-02':['Karoli
+na','Aida'],'02-03':['Balázs'],'02-04':['Ráhel','Csenge'],'02-05':['Ágota','Ingr
+id'],'02-06':['Dorottya','Dóra'],'02-07':['Tódor','Rómeó'],'02-08':['Aranka'],'0
+2-09':['Abigél','Alex'],'02-10':['Elvira'],'02-11':['Bertold','Marietta'],'02-12
+':['Lívia','Lídia'],'02-13':['Ella','Linda'],'02-14':['Bálint','Valentin'],'02-1
+5':['Kolos','Georgina'],'02-16':['Julianna','Lilla'],'02-17':['Donát'],'02-18':[
+'Bernadett'],'02-19':['Zsuzsanna'],'02-20':['Aladár','Álmos'],'02-21':['Eleonóra
+'],'02-22':['Gerzson'],'02-23':['Alfréd'],'02-24':['Mátyás'],'02-25':['Géza'],'0
+2-26':['Edina'],'02-27':['Ákos','Bátor'],'02-28':['Elemér'],'03-01':['Albin'],'0
+3-02':['Lujza'],'03-03':['Kornélia'],'03-04':['Kázmér'],'03-05':['Adorján','Adri
+án'],'03-06':['Leonóra','Inez'],'03-07':['Tamás'],'03-08':['Zoltán','Nőnap'],'03
+-09':['Franciska','Fanni'],'03-10':['Ildikó'],'03-11':['Szilárd'],'03-12':['Gerg
+ely'],'03-13':['Krisztián','Ajtony'],'03-14':['Matild'],'03-15':['Kristóf','Nemz
+eti ünnep'],'03-16':['Henrietta'],'03-17':['Gertrúd','Patrik'],'03-18':['Sándor'
+,'Ede'],'03-19':['József','Bánk'],'03-20':['Klaudia'],'03-21':['Benedek'],'03-22
+':['Beáta','Izolda'],'03-23':['Emőke'],'03-24':['Gábor','Karina'],'03-25':['Irén
+','Írisz'],'03-26':['Emánuel'],'03-27':['Hajnalka'],'03-28':['Gedeon','Johanna']
+,'03-29':['Auguszta'],'03-30':['Zalán'],'03-31':['Árpád'],'04-01':['Hugó'],'04-0
+2':['Áron'],'04-03':['Buda','Richárd'],'04-04':['Izidor'],'04-05':['Vince'],'04-
+06':['Vilmos','Bíborka'],'04-07':['Herman'],'04-08':['Dénes'],'04-09':['Erhard']
+,'04-10':['Zsolt'],'04-11':['Leó','Szaniszló'],'04-12':['Gyula'],'04-13':['Ida']
+,'04-14':['Tibor'],'04-15':['Anasztázia','Tas'],'04-16':['Csongor'],'04-17':['Ru
+dolf'],'04-18':['Andrea','Ilma'],'04-19':['Emma'],'04-20':['Tivadar'],'04-21':['
+Konrád'],'04-22':['Csilla','Noémi'],'04-23':['Béla'],'04-24':['György'],'04-25':
+['Márk'],'04-26':['Ervin'],'04-27':['Zita','Mariann'],'04-28':['Valéria'],'04-29
+':['Péter'],'04-30':['Katalin','Kitti'],'05-01':['Fülöp','Jakab','Munka ünnepe']
+,'05-02':['Zsigmond'],'05-03':['Tímea','Irma'],'05-04':['Mónika','Flórián'],'05-
+05':['Györgyi'],'05-06':['Ivett','Frida'],'05-07':['Gizella'],'05-08':['Mihály']
+,'05-09':['Gergely'],'05-10':['Ármin','Pálma'],'05-11':['Ferenc'],'05-12':['Pong
+rác'],'05-13':['Szervác','Imola'],'05-14':['Bonifác'],'05-15':['Zsófia','Szonja'
+],'05-16':['Mózes','Botond'],'05-17':['Paszkál'],'05-18':['Erik','Alexandra'],'0
+5-19':['Ivó','Milán'],'05-20':['Bernát','Felícia'],'05-21':['Konstantin'],'05-22
+':['Júlia','Rita'],'05-23':['Dezső'],'05-24':['Eszter','Eliza'],'05-25':['Orbán'
+],'05-26':['Fülöp','Evelin'],'05-27':['Hella'],'05-28':['Emil','Csanád'],'05-29'
+:['Magdolna'],'05-30':['Janka','Zsanett'],'05-31':['Angéla','Petronella'],'06-01
+':['Tünde','Gyermeknap'],'06-02':['Kármen','Anita'],'06-03':['Klotild'],'06-04':
+['Bulcsú'],'06-05':['Fatime'],'06-06':['Norbert','Cintia'],'06-07':['Róbert'],'0
+6-08':['Medárd'],'06-09':['Félix'],'06-10':['Margit','Gréta'],'06-11':['Barnabás
+'],'06-12':['Villő'],'06-13':['Antal','Anett'],'06-14':['Vazul'],'06-15':['Jolán
+','Vid'],'06-16':['Jusztin'],'06-17':['Laura','Alida'],'06-18':['Arnold','Levent
+e'],'06-19':['Gyárfás'],'06-20':['Rafael'],'06-21':['Alajos','Leila'],'06-22':['
+Paulina'],'06-23':['Zoltán'],'06-24':['Iván'],'06-25':['Vilmos'],'06-26':['János
+','Pál'],'06-27':['László'],'06-28':['Levente','Irén'],'06-29':['Péter','Pál'],'
+06-30':['Pál'],'07-01':['Annamária','Tihamér'],'07-02':['Ottó'],'07-03':['Kornél
+','Soma'],'07-04':['Ulrik'],'07-05':['Emese','Sarolta'],'07-06':['Csaba'],'07-07
+':['Apollónia'],'07-08':['Ellák'],'07-09':['Lukrécia'],'07-10':['Amália'],'07-11
+':['Nóra','Lili'],'07-12':['Izabella','Dalma'],'07-13':['Jenő'],'07-14':['Örs','
+Stella'],'07-15':['Henrik','Roland'],'07-16':['Valter'],'07-17':['Endre','Elek']
+,'07-18':['Frigyes'],'07-19':['Emília'],'07-20':['Illés'],'07-21':['Dániel','Dan
+iella'],'07-22':['Magdolna'],'07-23':['Lenke'],'07-24':['Kinga','Kincső'],'07-25
+':['Kristóf','Jakab'],'07-26':['Anna','Anikó'],'07-27':['Olga','Liliána'],'07-28
+':['Szabolcs'],'07-29':['Márta','Flóra'],'07-30':['Judit','Xénia'],'07-31':['Osz
+kár'],'08-01':['Boglárka'],'08-02':['Lehel'],'08-03':['Hermina'],'08-04':['Domon
+kos','Dominika'],'08-05':['Krisztina'],'08-06':['Berta','Bettina'],'08-07':['Ibo
+lya'],'08-08':['László'],'08-09':['Emőd'],'08-10':['Lőrinc'],'08-11':['Zsuzsanna
+','Tiborc'],'08-12':['Klára'],'08-13':['Ipoly'],'08-14':['Marcell'],'08-15':['M
+ária','Nagyboldogasszony'],'08-16':['Ábrahám'],'08-17':['Jácint'],'08-18':['Ilon
+a'],'08-19':['Huba'],'08-20':['István','Államalapítás ünnepe'],'08-21':['Sámuel'
+,'Hajna'],'08-22':['Menyhért','Mirjam'],'08-23':['Bence'],'08-24':['Bertalan'],'
+08-25':['Lajos','Patrícia'],'08-26':['Izsó'],'08-27':['Gáspár'],'08-28':['Ágosto
+n'],'08-29':['Beatrix','Erna'],'08-30':['Rózsa'],'08-31':['Erika','Bella'],'09-0
+1':['Egyed','Egon'],'09-02':['Rebeka','Dorina'],'09-03':['Hilda'],'09-04':['Roz
+ália'],'09-05':['Viktor','Lőrinc'],'09-06':['Zakariás'],'09-07':['Regina'],'09-0
+8':['Mária','Adrienn'],'09-09':['Ádám'],'09-10':['Nikolett','Hunor'],'09-11':['T
+eodóra'],'09-12':['Mária'],'09-13':['Kornél'],'09-14':['Szeréna','Roxána'],'09-1
+5':['Enikő','Melitta'],'09-16':['Edit'],'09-17':['Zsófia'],'09-18':['Diána'],'09
+-19':['Vilhelmina'],'09-20':['Friderika'],'09-21':['Máté','Mirella'],'09-22':['M
+óric'],'09-23':['Tekla'],'09-24':['Gellért','Mercédesz'],'09-25':['Eufrozina','K
+ende'],'09-26':['Jusztina'],'09-27':['Adalbert'],'09-28':['Vencel'],'09-29':['Mi
+hály'],'09-30':['Jeromos'],'10-01':['Malvin'],'10-02':['Petra'],'10-03':['Helga'
+],'10-04':['Ferenc'],'10-05':['Aurél'],'10-06':['Brúnó','Renáta'],'10-07':['Amál
+ia'],'10-08':['Koppány'],'10-09':['Dénes'],'10-10':['Gedeon'],'10-11':['Brigitta
+'],'10-12':['Miksa'],'10-13':['Kálmán','Ede'],'10-14':['Helén'],'10-15':['Teréz'
+],'10-16':['Gál'],'10-17':['Hedvig'],'10-18':['Lukács'],'10-19':['Nándor'],'10-2
+0':['Vendel'],'10-21':['Orsolya'],'10-22':['Előd'],'10-23':['Gyöngyi','Nemzeti
+ünnep'],'10-24':['Salamon'],'10-25':['Blanka','Bianka'],'10-26':['Dömötör'],'10-
+27':['Szabina'],'10-28':['Simon','Szimonetta'],'10-29':['Nárcisz'],'10-30':['Alf
+onz'],'10-31':['Farkas'],'11-01':['Marianna','Mindenszentek'],'11-02':['Achilles
+','Halottak napja'],'11-03':['Győző'],'11-04':['Károly'],'11-05':['Imre'],'11-06
+':['Lénárd'],'11-07':['Rezső'],'11-08':['Zsombor'],'11-09':['Tivadar'],'11-10':[
+'Réka'],'11-11':['Márton'],'11-12':['Jónás','Renátó'],'11-13':['Szilvia'],'11-14
+':['Aliz'],'11-15':['Albert','Lipót'],'11-16':['Ödön'],'11-17':['Hortenzia','Ger
+gő'],'11-18':['Jenő'],'11-19':['Erzsébet'],'11-20':['Jolán'],'11-21':['Olivér'],
+'11-22':['Cecília'],'11-23':['Kelemen','Klementina'],'11-24':['Emma'],'11-25':['
+Katalin'],'11-26':['Virág'],'11-27':['Virgil'],'11-28':['Stefánia'],'11-29':['Ta
+ksony'],'11-30':['András','Andor'],'12-01':['Elza'],'12-02':['Melinda','Vivien']
+,'12-03':['Ferenc','Olívia'],'12-04':['Borbála','Barbara'],'12-05':['Vilma'],'12
+-06':['Miklós'],'12-07':['Ambrus'],'12-08':['Mária'],'12-09':['Natália'],'12-10'
+:['Judit'],'12-11':['Árpád'],'12-12':['Gabriella'],'12-13':['Luca','Otília'],'12
+-14':['Szilárda'],'12-15':['Valér'],'12-16':['Etelka','Aletta'],'12-17':['Lázár'
+,'Olimpia'],'12-18':['Auguszta'],'12-19':['Viola'],'12-20':['Teofil'],'12-21':['
+Tamás'],'12-22':['Zénó'],'12-23':['Viktória'],'12-24':['Ádám','Éva','Szenteste']
+,'12-25':['Eugénia','Karácsony'],'12-26':['István','Karácsony'],'12-27':['János'
+],'12-28':['Kamilla'],'12-29':['Tamás','Tamara'],'12-30':['Dávid'],'12-31':['Szi
+lveszter'] };
+
+        function calculateEaster(year) { const a = year % 19, b = Math.floor(yea
+r / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b +
+8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i
+ = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.
+floor((a + 11 * h + 22 * l) / 451), month = Math.floor((h + l - 7 * m + 114) / 3
+1) - 1, day = ((h + l - 7 * m + 114) % 31) + 1; return new Date(Date.UTC(year, m
+onth, day)); }
+        function getWeatherIcon(code, isDay) { const map = { 0: isDay ? '☀️' : '
+🌙', 1: isDay ? '🌤️' : '🌙', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️', 51: '🌦️', 53: '
+🌦️', 55: '🌧️', 56: '🌨️', 57: '🌨️', 61: '🌦️', 63: '🌧️', 65: '🌧️', 66: '🌨️', 67: '
+🌨️', 71: '🌨️', 73: '🌨️', 75: '❄️', 77: '❄️', 80: '🌦️', 81: '🌧️', 82: '🌧️', 85: '
+🌨️', 86: '❄️', 95: '⛈️', 96: '⛈️', 99: '⛈️' }; return map[code] || '❓'; }
+        function getWeatherDescription(code) { const map = { 0: "Tiszta égbolt",
+ 1: "Többnyire tiszta", 2: "Részben felhős", 3: "Borult", 45: "Köd", 48: "Zúzmar
+ás köd", 51: "Gyenge szitálás", 53: "Mérsékelt szitálás", 55: "Sűrű szitálás", 5
+6: "Gyenge fagyos szitálás", 57: "Sűrű fagyos szitálás", 61: "Gyenge eső", 63: "
+Mérsékelt eső", 65: "Erős eső", 66: "Gyenge fagyos eső", 67: "Erős fagyos eső",
+71: "Gyenge havazás", 73: "Mérsékelt havazás", 75: "Erős havazás", 77: "Hószálli
+ngózás", 80: "Gyenge záporok", 81: "Mérsékelt záporok", 82: "Heves záporok", 85:
+ "Gyenge hózáporok", 86: "Erős hózáporok", 95: "Zivatar", 96: "Zivatar enyhe jég
+esővel", 99: "Zivatar erős jégesővel" }; return map[code] || "Ismeretlen"; }
+
+        function loadCountries() { availableCountries = extendedCountries; const
+ select = $('#countrySelect').empty(); select.append(`<option value="HU">Magyaro
+rszág</option>`); extendedCountries.filter(c => c.countryCode !== 'HU').sort((a,
+ b) => a.name.localeCompare(b.name, 'hu')).forEach(c => { select.append(`<option
+ value="${c.countryCode}">${c.name}</option>`); }); select.val(userCountry); }
+        function getCurrentLocation() { if (navigator.geolocation) { navigator.g
+eolocation.getCurrentPosition( pos => reverseGeocode(pos.coords.latitude, pos.co
+ords.longitude), err => { console.log('Geolokáció hiba:', err); initializeAll();
+ }); } else { initializeAll(); } }
+        function reverseGeocode(lat, lon) { userLat = lat; userLon = lon; $.ajax
+({ url: `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=
+${lon}&accept-language=hu`, success: function(data) { if (data && data.address)
+{ userLocation = data.address.city || data.address.town || data.address.village
+|| data.address.county || 'Ismeretlen hely'; userCountry = data.address.country_
+code ? data.address.country_code.toUpperCase() : 'HU'; if (availableCountries.fi
+nd(c => c.countryCode === userCountry)) { $('#countrySelect').val(userCountry);
+selectedCountry = userCountry; } } initializeAll(); }, error: () => initializeAl
+l() }); }
+        function updateLocation() { const newLocation = $('#locationInput').val(
+); if (newLocation) { $.ajax({ url: `https://nominatim.openstreetmap.org/search?
+format=json&q=${encodeURIComponent(newLocation)}&limit=1&accept-language=hu`, su
+ccess: data => (data && data.length > 0) ? reverseGeocode(data[0].lat, data[0].l
+on) : alert('Helyszín nem található.'), error: () => alert('Keresési hiba.') });
+ } }
+        function updateTitle(locationName) { document.title = (locationName && l
+ocationName.toLowerCase() !== "budapest") ? `Időjárás és naptár - ${locationName
+} | Naptár Pro` : 'Naptár Pro - Valós idejű adatokkal'; }
+        function setDaytimeColors() { const hour = new Date().getHours(); $('bod
+y').removeClass('morning afternoon evening night').addClass(hour >= 6 && hour <
+12 ? 'morning' : hour >= 12 && hour < 17 ? 'afternoon' : hour >= 17 && hour < 21
+ ? 'evening' : 'night'); }
+
+        function updateTime() {
+            const targetTimezone = weatherData ? weatherData.timezone : Intl.Dat
+eTimeFormat().resolvedOptions().timeZone;
+            const now = new Date();
+            const dateInTZStr = now.toLocaleString('en-CA', { timeZone: targetTi
+mezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minu
+te: '2-digit', second: '2-digit', hour12: false }).replace(',', '');
+            const dateInTZ = new Date(dateInTZStr.replace(' ', 'T') + 'Z');
+
+            $('#mainClock').text(now.toLocaleTimeString('hu-HU', { timeZone: tar
+getTimezone }));
+            $('#mainTimezone').text(targetTimezone.replace(/_/g, ' '));
+            $('#currentDayInfo').html(`${dateInTZ.toLocaleDateString('hu-HU', {t
+imeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric'})}, ${dateInTZ.to
+LocaleDateString('hu-HU', {timeZone: 'UTC', weekday: 'long'})}`);
+
+            const startOfYear = new Date(Date.UTC(dateInTZ.getUTCFullYear(), 0,
+0));
+            $('#dayOfYear').text(Math.floor((dateInTZ - startOfYear) / 86400000)
+);
+            const endOfYear = new Date(Date.UTC(dateInTZ.getUTCFullYear(), 11, 3
+1));
+            $('#daysRemaining').text(Math.floor((endOfYear - dateInTZ) / 8640000
+0) + 1);
+            $('#weekNumber').text(getWeekNumber(dateInTZ) + '.');
+
+            const isDST = isDaylightSavingTime(now, targetTimezone);
+            const nextDST = getNextDSTChange(now, targetTimezone);
+            $('#timeZoneType').text(isDST ? 'nyári' : 'téli');
+            $('#timezoneDetails').text(`Váltás: ${nextDST.toLocaleDateString('hu
+-HU')}`);
+
+            updateWorldClocks(now);
+            updateNamedays(dateInTZ);
+            updateZodiacSigns(dateInTZ);
+            updateCountdowns(dateInTZ);
+        }
+
+function isDaylightSavingTime(date = new Date(), timeZone) {
+    if (!timeZone) {
+        return false;
+    }
+    try {
+        const year = date.getFullYear();
+
+        // Numerikus GMT eltolás meghatározása januárra
+        const janFullOffset = new Date(Date.UTC(year, 0, 1)).toLocaleString("en-
+US", { timeZone, timeZoneName: 'longOffset' });
+        const janGmtMatch = janFullOffset.match(/GMT([+-]\d+)/);
+        if (!janGmtMatch) return false;
+        const janOffset = parseInt(janGmtMatch[1], 10);
+
+        // Numerikus GMT eltolás meghatározása júliusra
+        const julFullOffset = new Date(Date.UTC(year, 6, 1)).toLocaleString("en-
+US", { timeZone, timeZoneName: 'longOffset' });
+        const julGmtMatch = julFullOffset.match(/GMT([+-]\d+)/);
+        if (!julGmtMatch) return false;
+        const julOffset = parseInt(julGmtMatch[1], 10);
+
+        // Ha nincs különbség a téli és nyári eltolás között, nincs nyári idősz
+ámítás
+        if (janOffset === julOffset) {
+            return false;
+        }
+
+        // Aktuális dátum eltolásának meghatározása
+        const currentFullOffset = date.toLocaleString("en-US", { timeZone, timeZ
+oneName: 'longOffset' });
+        const currentGmtMatch = currentFullOffset.match(/GMT([+-]\d+)/);
+        if (!currentGmtMatch) return false;
+        const currentOffset = parseInt(currentGmtMatch[1], 10);
+
+        // A téli időszámítás (standard time) eltolása mindig a kisebb numerikus
+ érték
+        // (pl. a +1 kisebb, mint a +2; a +10 kisebb, mint a +11).
+        const standardOffset = Math.min(janOffset, julOffset);
+
+        // Egy dátum akkor van a nyári időszámításban, ha az eltolása nem egyezi
+k a téli (standard) eltolással.
+        return currentOffset !== standardOffset;
+
+    } catch (e) {
+        console.error("Hiba az isDaylightSavingTime függvényben:", e);
+        return false;
+    }
+}
+
+        function getNextDSTChange(date, timeZone) {
+            const year = date.getFullYear();
+            for (let m = date.getMonth(); m < 12; m++) {
+                for (let d = 1; d <= 31; d++) {
+                    const testDate = new Date(year, m, d);
+                    if (testDate.getMonth() !== m || testDate < date) continue;
+
+                    const prevDate = new Date(testDate.getTime() - 24 * 3600 * 1
+000);
+                    const currentDST = isDaylightSavingTime(testDate, timeZone);
+                    const prevDST = isDaylightSavingTime(prevDate, timeZone);
+
+                    if (currentDST !== prevDST) return testDate;
+                }
+            }
+            return getNextDSTChange(new Date(year + 1, 0, 1), timeZone);
+        }
+
+        function checkCurrentDayHolidays(date) { const dateStr = `${String(date.
+getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0'
+)}`; const year = date.getUTCFullYear(); let holidayMatches = []; for (const [ke
+y, holiday] of Object.entries(specialHolidays)) { if (holiday.date === dateStr)
+holidayMatches.push({ name: key, description: holiday.description }); else if (h
+oliday.calculateDate) { const holidayDate = holiday.calculateDate(year); if (hol
+idayDate.getUTCMonth() === date.getUTCMonth() && holidayDate.getUTCDate() === da
+te.getUTCDate()) holidayMatches.push({ name: key, description: holiday.descripti
+on }); } } const container = $('#currentDayHolidays').empty(); if (holidayMatche
+s.length > 0) { container.html('<div class="holiday-match"><strong><i class="fas
+ fa-star"></i> Mai jeles nap(ok):</strong>' + holidayMatches.map(m => `<span cla
+ss="holiday-match-title">${m.name.charAt(0).toUpperCase() + m.name.slice(1)}</sp
+an><p style="margin: 0 0 5px 0;">${m.description}</p>`).join('') + '</div>'); }
+}
+        function getNextSeason(date) { const year = date.getFullYear(), seasons
+= [{ name: 'tavasz', date: new Date(year, 2, 20) }, { name: 'nyár', date: new Da
+te(year, 5, 21) }, { name: 'ősz', date: new Date(year, 8, 23) }, { name: 'tél',
+date: new Date(year, 11, 21) }]; for (let s of seasons) if (date < s.date) retur
+n s; return { name: 'tavasz', date: new Date(year + 1, 2, 20) }; }
+        function getWeekNumber(date) { const first = new Date(date.getUTCFullYea
+r(), 0, 1); return Math.ceil((((date - first) / 86400000) + first.getUTCDay() +
+1) / 7); }
+        function updateWorldClocks(now) { const cities = [ { id: 'timeLosAngeles
+', tz: 'America/Los_Angeles' }, { id: 'timeNewYork', tz: 'America/New_York' }, {
+ id: 'timeLondon', tz: 'Europe/London' }, { id: 'timeMoscow', tz: 'Europe/Moscow
+' }, { id: 'timeDubai', tz: 'Asia/Dubai' }, { id: 'timeHongKong', tz: 'Asia/Hong
+_Kong' }, { id: 'timeTokyo', tz: 'Asia/Tokyo' }, { id: 'timeSydney', tz: 'Austra
+lia/Sydney' } ]; cities.forEach(c => { try { $(`#${c.id}`).text(now.toLocaleTime
+String('hu-HU', { timeZone: c.tz, hour: '2-digit', minute: '2-digit' })); } catc
+h (e) { $(`#${c.id}`).text('--:--'); }}); }
+
+        function fetchAndDisplayMeaning(name, containerId) {
+            const specialWords = ['újév', 'vízkereszt', 'nemzeti ünnep', 'munka ünnepe', 'gyermeknap', 'államalapítás ünnepe', 'mindenszentek', 'halottak napja', 'szenteste', 'karácsony', 'nagyboldogasszony'];
+            if (specialWords.includes(name.toLowerCase())) {
+                return;
+            }
+
+            const apiUrl = `https://hu.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&redirects=1&titles=${encodeURIComponent(name)}`;
+
+            $.ajax({
+                url: apiUrl,
+                dataType: 'jsonp',
+                success: function(data) {
+                    const pages = data.query.pages;
+                    const pageId = Object.keys(pages)[0];
+                    if (pageId !== "-1") {
+                        const extract = pages[pageId].extract;
+                        if (extract) {
+                            const firstSentence = extract.split('. ')[0];
+                            const meaningHtml = `
+                                <div class="nameday-meaning">
+                                    <strong>${name}</strong>
+                                    <p>${firstSentence}.</p>
+                                </div>
+                            `;
+                            $(containerId).append(meaningHtml);
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateNamedays(now) {
+            const todayStr = `${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+            const todayNames = namedays[todayStr] || ['Nincs adat'];
+            $('#todayNameday').text(todayNames.join(', '));
+
+            const tomorrow = new Date(now);
+            tomorrow.setUTCDate(now.getUTCDate() + 1);
+            const tomorrowStr = `${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrow.getUTCDate()).padStart(2, '0')}`;
+            const tomorrowNames = namedays[tomorrowStr] || ['Nincs adat'];
+            $('#tomorrowNameday').text(tomorrowNames.join(', '));
+
+            $('#namedayInfo').empty();
+            if (todayNames[0] !== 'Nincs adat') {
+                 fetchAndDisplayMeaning(todayNames[0], '#namedayInfo');
+            }
+             if (tomorrowNames[0] !== 'Nincs adat') {
+                 fetchAndDisplayMeaning(tomorrowNames[0], '#namedayInfo');
+            }
+        }
+
+function updateAnniversaries(date) {
+    const country = availableCountries.find(c => c.countryCode === selectedCount
+ry);
+    $('#anniversaryCountry').text(`(${(country ? country.name : '')})`);
+    const wikiLang = getWikiLanguageCode(selectedCountry);
+    const day = date.getUTCDate();
+
+    let monthName;
+    if (wikiLang === 'hu') {
+        monthName = ['január', 'február', 'március', 'április', 'május', 'június
+',
+                     'július', 'augusztus', 'szeptember', 'október', 'november',
+ 'december'][date.getUTCMonth()];
+    } else {
+        monthName = date.toLocaleDateString('en-US', { month: 'long', timeZone:
+'UTC' });
+    }
+
+    const pageTitle = (wikiLang === 'hu') ? `${monthName}_${day}.` : `${monthNam
+e}_${day}`;
+
+    $('#anniversaryWikiLink').attr('href', `https://${wikiLang}.wikipedia.org/wi
+ki/${encodeURIComponent(pageTitle)}`);
+
+    $.ajax({
+        url: `https://${wikiLang}.wikipedia.org/w/api.php`,
+        dataType: 'jsonp',
+        data: {
+            action: 'query',
+            prop: 'extracts',
+            titles: pageTitle,
+            format: 'json',
+            exintro: false,
+            explaintext: false,
+            exsectionformat: 'wiki'
+        },
+        success: function(data) {
+            if (data && data.query && data.query.pages) {
+                const pages = data.query.pages;
+                const pageId = Object.keys(pages)[0];
+                const page = pages[pageId];
+
+                if (page && page.extract) {
+                    const extract = page.extract;
+
+                    // Események keresése a szövegben
+                    let eventsContent = '';
+
+                    if (wikiLang === 'hu') {
+                        const eventsMatch = extract.match(/==\s*Események\s*==([
+^=]+)/);
+                        if (eventsMatch) {
+                            const events = eventsMatch[1].split('\n')
+                                .filter(line => line.trim().startsWith('*'))
+                                .slice(0, 15)
+                                .map(line => line.replace(/^\*\s*/, '').trim())
+                                .filter(line => line.length > 0);
+
+                            if (events.length > 0) {
+                                eventsContent = events.map(event =>
+                                    `<div class="notable-day-item">${event}</div
+>`
+                                ).join('');
+                            }
+                        }
+                    } else {
+                        // Angol és más nyelvekhez
+                        const eventsMatch = extract.match(/==\s*Events\s*==([^=]
++)/);
+                        if (eventsMatch) {
+                            const events = eventsMatch[1].split('\n')
+                                .filter(line => line.trim().startsWith('*'))
+                                .slice(0, 15)
+                                .map(line => line.replace(/^\*\s*/, '').trim())
+                                .filter(line => line.length > 0);
+
+                            if (events.length > 0) {
+                                eventsContent = events.map(event =>
+                                    `<div class="notable-day-item">${event}</div
+>`
+                                ).join('');
+                            }
+                        }
+                    }
+
+                    if (eventsContent) {
+                        $('#anniversaryContent').html(eventsContent);
+                    } else {
+                        // Ha nem találunk eseményeket, próbáljuk meg parse API-
+val
+                        fallbackToParseAPI(wikiLang, pageTitle);
+                    }
+                } else {
+                    $('#anniversaryContent').html('<p style="text-align: center;
+ opacity: 0.7;">Nincs adat erre a napra.</p>');
+                }
+            } else {
+                $('#anniversaryContent').html('<p style="text-align: center; opa
+city: 0.7;">Nincs adat erre a napra.</p>');
+            }
+        },
+        error: function() {
+            $('#anniversaryContent').html('<p style="text-align: center; opacity
+: 0.7;">Az évfordulók nem elérhetők.</p>');
+        }
+    });
+}
+
+// Tartalék függvény a parse API használatához
+function fallbackToParseAPI(wikiLang, pageTitle) {
+    $.ajax({
+        url: `https://${wikiLang}.wikipedia.org/w/api.php`,
+        dataType: 'jsonp',
+        data: {
+            action: 'parse',
+            page: pageTitle,
+            prop: 'sections',
+            format: 'json'
+        },
+        success: function(data) {
+            if (data && data.parse && data.parse.sections) {
+                const eventSection = data.parse.sections.find(s =>
+                    s.line === 'Események' || s.line === 'Events' ||
+                    s.line === 'Ereignisse' || s.line === 'Événements'
+                );
+
+                if (eventSection) {
+                    // Ha van esemény szekció, próbáljuk meg lekérni a tartalmat
+                    $.ajax({
+                        url: `https://${wikiLang}.wikipedia.org/w/api.php`,
+                        dataType: 'jsonp',
+                        data: {
+                            action: 'parse',
+                            page: pageTitle,
+                            prop: 'text',
+                            section: eventSection.index,
+                            format: 'json'
+                        },
+                        success: function(data) {
+                            if (data && data.parse && data.parse.text) {
+                                const html = $('<div>').html(data.parse.text['*'
+]);
+                                const events = html.find('li').slice(0, 15);
+
+                                if (events.length > 0) {
+                                    let eventsHtml = '';
+                                    events.each(function() {
+                                        const text = $(this).text().trim();
+                                        if (text) {
+                                            eventsHtml += `<div class="notable-d
+ay-item">${text}</div>`;
+                                        }
+                                    });
+                                    $('#anniversaryContent').html(eventsHtml);
+                                } else {
+                                    $('#anniversaryContent').html('<p style="tex
+t-align: center; opacity: 0.7;">Nincs rögzített esemény erre a napra.</p>');
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
+        function getWikiLanguageCode(cc) { const map = { 'HU': 'hu', 'DE': 'de',
+ 'AT': 'de', 'CH': 'de', 'FR': 'fr', 'ES': 'es', 'IT': 'it', 'PT': 'pt', 'GB': '
+en', 'US': 'en', 'PL': 'pl', 'CZ': 'cs', 'SK': 'sk', 'RO': 'ro', 'RU': 'ru', 'JP
+': 'ja', 'CN': 'zh' }; return map[cc] || 'en'; }
+        function changeNotableDay(dir) { currentNotableDate.setUTCDate(currentNo
+tableDate.getUTCDate() + dir); const dateStr = currentNotableDate.toISOString().
+split('T')[0]; $('#notableDatePicker').val(dateStr); checkCurrentDayHolidays(cur
+rentNotableDate); updateAnniversaries(currentNotableDate); }
+        function goToNotableToday() { currentNotableDate = new Date(); const tod
+ayStr = currentNotableDate.toISOString().split('T')[0]; $('#notableDatePicker').
+val(todayStr); checkCurrentDayHolidays(new Date(Date.now())); updateAnniversarie
+s(currentNotableDate); }
+        function goToNotableDate() { const sel = $('#notableDatePicker').val();
+if (sel) { currentNotableDate = new Date(sel + "T12:00:00Z"); checkCurrentDayHol
+idays(currentNotableDate); updateAnniversaries(currentNotableDate); } }
+        $('#specialHolidaySearch').on('input', function() { const term = $(this)
+.val().toLowerCase().trim(), container = $('#specialHolidayResults').empty(); if
+ (term.length < 3) return; let html = ''; for (const [key, h] of Object.entries(
+specialHolidays)) { if (key.includes(term) || h.description.toLowerCase().includ
+es(term)) { let dateStr = h.calculateDate ? h.calculateDate(new Date().getFullYe
+ar()).toLocaleDateString('hu-HU', { month: 'long', day: 'numeric', timeZone: 'UT
+C' }) : new Date(2000, h.date.split('-')[0]-1, h.date.split('-')[1]).toLocaleDat
+eString('hu-HU', { month: 'long', day: 'numeric'}); html += `<div class="search-
+result-item"><strong>${key.charAt(0).toUpperCase() + key.slice(1)}</strong><br><
+small>${h.description} (${dateStr})</small></div>`; } } container.html(html || '
+<div class="search-result-item" style="border-left-color: #999;">Nincs találat</
+div>'); });
+        $('#namedaySearch').on('input', function() { const term = $(this).val().
+toLowerCase(), res = $('#namedaySearchResult').empty(); if (term.length < 2) ret
+urn; let results = []; for (let [date, names] of Object.entries(namedays)) { for
+ (let name of names) { if (name.toLowerCase().includes(term)) { const [month, da
+y] = date.split('-'); results.push(`<div><strong>${name}</strong>: ${new Date(20
+00, month - 1, day).toLocaleDateString('hu-HU', { month: 'long', day: 'numeric'
+})}</div>`); } } } res.html(results.slice(0, 5).join('') || '<div style="color:
+#999;">Nincs találat</div>'); });
+        function updateZodiacSigns(date) { const zodiacs = [ {n: 'Bak', s: [1, 1
+], e: [1, 19]}, {n: 'Vízöntő', s: [1, 20], e: [2, 18]}, {n: 'Halak', s: [2, 19],
+ e: [3, 20]}, {n: 'Kos', s: [3, 21], e: [4, 19]}, {n: 'Bika', s: [4, 20], e: [5,
+ 20]}, {n: 'Ikrek', s: [5, 21], e: [6, 20]}, {n: 'Rák', s: [6, 21], e: [7, 22]},
+ {n: 'Oroszlán', s: [7, 23], e: [8, 22]}, {n: 'Szűz', s: [8, 23], e: [9, 22]}, {
+n: 'Mérleg', s: [9, 23], e: [10, 22]}, {n: 'Skorpió', s: [10, 23], e: [11, 21]},
+ {n: 'Nyilas', s: [11, 22], e: [12, 21]}, {n: 'Bak', s: [12, 22], e: [12, 31]} ]
+; const month = date.getUTCMonth() + 1, day = date.getUTCDate(); $('#sunZodiac')
+.text(zodiacs.find(z => (month === z.s[0] && day >= z.s[1]) || (month === z.e[0]
+ && day <= z.e[1])).n); const moonAge = (date - new Date(2000, 0, 6, 18, 14)) /
+86400000 % 27.321661; $('#moonZodiac').text(['Kos', 'Bika', 'Ikrek', 'Rák', 'Oro
+szlán', 'Szűz', 'Mérleg', 'Skorpió', 'Nyilas', 'Bak', 'Vízöntő', 'Halak'][Math.f
+loor(moonAge / 27.321661 * 12)]); }
+        function updateCountdowns(now) { const year = now.getUTCFullYear(); let
+easter = calculateEaster(year); if (now > easter) easter = calculateEaster(year
++ 1); $('#daysToEaster').text(Math.ceil((easter - now) / 86400000)); let christm
+as = new Date(Date.UTC(year, 11, 25)); if (now > christmas) christmas = new Date
+(Date.UTC(year + 1, 11, 25)); $('#daysToChristmas').text(Math.ceil((christmas -
+now) / 86400000)); $('#daysToNewYear').text(Math.ceil((new Date(Date.UTC(year +
+1, 0, 1)) - now) / 86400000)); const dstDate = getNextDSTChange(now, weatherData
+ ? weatherData.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone); $('
+#daysToDST').text(Math.ceil((dstDate - now) / 86400000)); $('#dstLabel').text(`n
+ap a váltásig`); const nextSeason = getNextSeason(now); $('#daysToNextSeason').t
+ext(Math.ceil((nextSeason.date - now) / 86400000)); $('#nextSeasonLabel').text(`
+nap ${nextSeason.name} kezdetéig`); }
+        function getWeatherData() { const apiUrl = `https://api.open-meteo.com/v
+1/forecast?latitude=${userLat}&longitude=${userLon}&current=temperature_2m,relat
+ive_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cov
+er,pressure_msl,wind_speed_10m,wind_gusts_10m&daily=weather_code,temperature_2m_
+max,temperature_2m_min,sunrise,sunset,precipitation_sum,precipitation_probabilit
+y_max&timezone=auto&forecast_days=3`; $.ajax({ url: apiUrl, success: function(da
+ta) { weatherData = data; $('#weatherLoading').hide(); $('#weatherContent').show
+(); updateWeatherDisplay(data); updateSunMoonTimes(data); }, error: () => $('#we
+atherLoading').html('<p style="color: red;">Időjárás betöltése sikertelen</p>')
+}); }
+        function updateWeatherDisplay(data) { const { current, daily } = data; $
+('#currentWeatherIcon').html(getWeatherIcon(current.weather_code, current.is_day
+)); $('#currentTemp').text(`${Math.round(current.temperature_2m)}°C`); $('#curre
+ntCondition').text(getWeatherDescription(current.weather_code)); $('#feelsLike')
+.text(`Hőérzet: ${Math.round(current.apparent_temperature)}°C`); const details =
+ [ { l: 'Szél', v: `${Math.round(current.wind_speed_10m)} km/h`, i: 'wind' }, {
+l: 'Lökések', v: `${Math.round(current.wind_gusts_10m)} km/h`, i: 'wind' }, { l:
+ 'Pára', v: `${current.relative_humidity_2m}%`, i: 'tint' }, { l: 'Légnyomás', v
+: `${Math.round(current.pressure_msl)} hPa`, i: 'tachometer-alt' } ]; $('#weathe
+rDetails').html(details.map(d => `<div class="weather-detail-item"><span class="
+weather-detail-label"><i class="fas fa-${d.i}"></i> ${d.l}</span><span class="we
+ather-detail-value">${d.v}</span></div>`).join('')); let fHtml = ''; for (let i
+= 0; i < 3; i++) { fHtml += `<div style="text-align:center;padding:10px;backgrou
+nd:rgba(0,0,0,0.05);border-radius:10px;"><strong>${new Date(daily.time[i]).toLoc
+aleDateString('hu-HU',{weekday:'short'})}</strong><div style="font-size:2em;">${
+getWeatherIcon(daily.weather_code[i],true)}</div><div><span style="color:red;">$
+{Math.round(daily.temperature_2m_max[i])}°</span>/<span style="color:blue;">${Ma
+th.round(daily.temperature_2m_min[i])}°</span></div></div>`; } $('#forecast').ht
+ml(fHtml); }
+        function updateSunMoonTimes(data) { const timeToMinutes = (ts) => { cons
+t [h, m] = ts.split(':').map(Number); return h * 60 + m; }; const sunriseMins =
+timeToMinutes(data.daily.sunrise[0].split('T')[1]); const sunsetMins = timeToMin
+utes(data.daily.sunset[0].split('T')[1]); const sunrisePercent = (sunriseMins /
+1440) * 100, sunsetPercent = (sunsetMins / 1440) * 100, noonPercent = (sunrisePe
+rcent + sunsetPercent) / 2; $('#sunScale').css('background', `linear-gradient(to
+ right, #1a1a2e ${sunrisePercent-5}%, #87ceeb ${sunrisePercent+5}%, #ffce45 ${no
+onPercent}%, #ff6b6b ${sunsetPercent-5}%, #1a1a2e ${sunsetPercent+5}%)`); $('#su
+nriseTime').text(data.daily.sunrise[0].split('T')[1]); $('#sunsetTime').text(dat
+a.daily.sunset[0].split('T')[1]); $('#sunScaleMarkers').html(`<div class="time-m
+arker sunrise-marker" style="left:${sunrisePercent}%"></div><div class="time-mar
+ker noon-marker" style="left:${noonPercent}%"></div><div class="time-marker suns
+et-marker" style="left:${sunsetPercent}%"></div>`); updateSunPosition(); if (sun
+UpdateInterval) clearInterval(sunUpdateInterval); sunUpdateInterval = setInterva
+l(updateSunPosition, 60000); const moonTimes = SunCalc.getMoonTimes(new Date(dat
+a.daily.time[0]), userLat, userLon); $('#sunMoonTimes').html(`<div style="displa
+y:grid;grid-template-columns:repeat(2,1fr);gap:15px;"><div style="text-align:cen
+ter"><i class="fas fa-sun sun-icon"></i><div>Napkelte</div><strong>${data.daily.
+sunrise[0].split('T')[1]}</strong></div><div style="text-align:center"><i class=
+"fas fa-sun" style="color:#e74c3c;font-size:1.5em"></i><div>Napnyugta</div><stro
+ng>${data.daily.sunset[0].split('T')[1]}</strong></div><div style="text-align:ce
+nter"><i class="fas fa-moon moon-icon"></i><div>Holdkelte</div><strong>${moonTim
+es.rise?moonTimes.rise.toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digi
+t'}) : 'N/A'}</strong></div><div style="text-align:center"><i class="fas fa-moon
+" style="color:#9b59b6;font-size:1.5em"></i><div>Holdnyugta</div><strong>${moonT
+imes.set?moonTimes.set.toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digi
+t'}) : 'N/A'}</strong></div></div>`); }
+        function updateSunPosition() { if (!weatherData) return; const timeToMin
+utes = (ts) => { const [h, m] = ts.split(':').map(Number); return h * 60 + m; };
+ const nowInLocation = new Date().toLocaleTimeString('en-GB', { timeZone: weathe
+rData.timezone, hour12: false, hour: '2-digit', minute: '2-digit'}); $('#sunPosi
+tion').css('left', `${(timeToMinutes(nowInLocation) / 1440) * 100}%`); }
+
+        // JAVÍTVA: Holdfázis grafika logikája
+function updateMoonPhase() {
+    const illum = SunCalc.getMoonIllumination(new Date());
+    const phase = illum.phase;
+    const illuminated = illum.fraction;
+    const isNorthernHemisphere = userLat >= 0;
+
+    const visual = $('#moonVisual');
+    const overlay = $('#moonPhaseOverlay');
+
+    // Tisztítsuk meg az előző stílusokat
+    visual.attr('style', '');
+    overlay.attr('style', '');
+
+    // Alapstílusok újra alkalmazása
+    visual.css({
+        'width': '150px',
+        'height': '150px',
+        'border-radius': '50%',
+        'margin': '15px auto',
+        'position': 'relative',
+        'box-shadow': 'inset -10px -10px 20px rgba(0, 0, 0, 0.1), 0 0 10px rgba(
+255, 255, 255, 0.3)',
+        'overflow': 'hidden',
+        'background': '#e0e0e0'
+    });
+
+    // Félkör overlay létrehozása a holdfázishoz
+    let overlayStyle = {
+        'position': 'absolute',
+        'top': '0',
+        'width': '150px',
+        'height': '150px',
+        'border-radius': '50%'
+    };
+
+    // Fázis alapján beállítjuk az overlay pozícióját és méretét
+    if (phase < 0.25) {
+        // Növekvő hold (jobb oldal világos)
+        const width = (1 - phase * 4) * 150;
+        overlayStyle['width'] = width + 'px';
+        overlayStyle['right'] = '0';
+        overlayStyle['background'] = '#2c2c2c';
+    } else if (phase < 0.5) {
+        // Növekvő hold telihold felé (bal oldal kezd világosodni)
+        const width = ((phase - 0.25) * 4) * 150;
+        overlayStyle['width'] = width + 'px';
+        overlayStyle['left'] = '0';
+        overlayStyle['background'] = '#e0e0e0';
+        visual.css('background', '#2c2c2c');
+    } else if (phase < 0.75) {
+        // Fogyó hold (bal oldal sötétedik)
+        const width = ((phase - 0.5) * 4) * 150;
+        overlayStyle['width'] = width + 'px';
+        overlayStyle['left'] = '0';
+        overlayStyle['background'] = '#2c2c2c';
+    } else {
+        // Fogyó hold újhold felé (jobb oldal is sötétedik)
+        const width = (1 - (phase - 0.75) * 4) * 150;
+        overlayStyle['width'] = width + 'px';
+        overlayStyle['right'] = '0';
+        overlayStyle['background'] = '#e0e0e0';
+        visual.css('background', '#2c2c2c');
+    }
+
+    // Déli féltekén fordított a nézet
+    if (!isNorthernHemisphere) {
+        if (overlayStyle['left'] !== undefined) {
+            overlayStyle['right'] = overlayStyle['left'];
+            delete overlayStyle['left'];
+        } else if (overlayStyle['right'] !== undefined) {
+            overlayStyle['left'] = overlayStyle['right'];
+            delete overlayStyle['right'];
+        }
+    }
+
+    overlay.css(overlayStyle);
+
+    // Fázis neve
+    let phaseName = '';
+    if (phase < 0.03 || phase > 0.97) phaseName = 'Újhold';
+    else if (phase < 0.23) phaseName = 'Növekvő sarló';
+    else if (phase < 0.27) phaseName = 'Első negyed';
+    else if (phase < 0.48) phaseName = 'Növekvő hold';
+    else if (phase < 0.52) phaseName = 'Telihold';
+    else if (phase < 0.73) phaseName = 'Fogyó hold';
+    else if (phase < 0.77) phaseName = 'Utolsó negyed';
+    else phaseName = 'Fogyó sarló';
+
+    $('#moonPhaseName').text(phaseName);
+    $('#moonPhasePercent').text(`Megvilágítás: ${Math.round(illuminated * 100)}%
+`);
+    $('#moonLocationNote').text(`(${isNorthernHemisphere ? 'Északi' : 'Déli'} f
+élteke nézet)`);
+}
+
+        function getHolidays(y, c) { const k = `${y}-${c}`; if (holidaysCache[k]
+) return Promise.resolve(holidaysCache[k]); return $.ajax({ url: `https://date.n
+ager.at/api/v3/PublicHolidays/${y}/${c}`, success: d => holidaysCache[k] = d, er
+ror: () => [] }); }
+        function getLongWeekends(y, c) { const k = `${y}-${c}`; if (longWeekends
+Cache[k]) return Promise.resolve(longWeekendsCache[k]); return $.ajax({ url: `ht
+tps://date.nager.at/api/v3/LongWeekend/${y}/${c}`, success: d => longWeekendsCac
+he[k] = d, error: () => [] }); }
+        function renderCalendar() { const y = currentCalendarDate.getFullYear(),
+ m = currentCalendarDate.getMonth(); $('#calendarMonthYear').text(currentCalenda
+rDate.toLocaleDateString('hu-HU', { year: 'numeric', month: 'long' })); Promise.
+all([getHolidays(y, selectedCountry), getLongWeekends(y, selectedCountry)]).then
+(([holidays, longWeekends]) => { let html = ['H', 'K', 'Sz', 'Cs', 'P', 'Sz', '<
+span style="color:#e74c3c">V</span>'].map(d => `<div style="text-align:center;fo
+nt-weight:bold;padding:5px;">${d}</div>`).join(''); const firstDay = new Date(y,
+ m, 1).getDay(); html += '<div></div>'.repeat(firstDay === 0 ? 6 : firstDay - 1)
+; const today = new Date(); for (let day = 1; day <= new Date(y, m + 1, 0).getDa
+te(); day++) { const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(
+day).padStart(2, '0')}`; const h = holidays.find(h => h.date === dateStr); const
+ isT = y === today.getFullYear() && m === today.getMonth() && day === today.getD
+ate(); const isS = new Date(y, m, day).getDay() === 0; let cls = ['calendar-day'
+]; if (h) cls.push('holiday'); if (isT) cls.push('today'); if (isS && !h) cls.pu
+sh('sunday'); html += `<div class="${cls.join(' ')}" ${h ? `title="${h.localName
+ || h.name}"` : ''}>${day}</div>`; } $('#calendarGrid').html(html); $('#longWeek
+ends').html(longWeekends.length > 0 ? '<h4>Hosszú hétvégék:</h4>' + longWeekends
+.map(w => `<div style="padding:8px;margin:5px 0;background:rgba(0,200,0,0.1);bor
+der-radius:8px;border-left:4px solid #2ecc71"><strong>${new Date(w.startDate).to
+LocaleDateString('hu-HU',{month:'short',day:'numeric'})} - ${new Date(w.endDate)
+.toLocaleDateString('hu-HU',{month:'short',day:'numeric'})}</strong> (${w.dayCou
+nt} nap)</div>`).join('') : ''); }); }
+        function changeMonth(d) { currentCalendarDate.setMonth(currentCalendarDa
+te.getMonth() + d); renderCalendar(); }
+        function goToToday() { currentCalendarDate = new Date(); renderCalendar(
+); }
+        $('#countrySelect').on('change', function() { selectedCountry = $(this).
+val(); renderCalendar(); updateAnniversaries(currentNotableDate); });
+        function initRadarMap() { if (radarMap) radarMap.remove(); radarMap = L.
+map('radar-map').setView([userLat, userLon], 8); L.tileLayer('https://{s}.tile.o
+penstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(rad
+arMap); currentLocationMarker = L.marker([userLat, userLon], { icon: L.divIcon({
+ className: 'leaflet-marker-icon', html: '<i class="fas fa-map-marker-alt" style
+="color:#e74c3c;font-size:24px;text-shadow:0 0 3px #fff;"></i>', iconSize: [24,
+24], iconAnchor: [12, 24] }) }).addTo(radarMap); loadRadarLayers(); }
+        function loadRadarLayers(c = '2') { $.ajax({ url: 'https://api.rainviewe
+r.com/public/weather-maps.json', success: function(d) { if (radarLayers.length)
+radarLayers.forEach(l => radarMap.removeLayer(l.layer)); radarLayers = []; const
+ frames = [...d.radar.past, ...d.radar.nowcast]; frames.forEach(f => radarLayers
+.push({ layer: L.tileLayer(`${d.host}${f.path}/256/{z}/{x}/{y}/${c}/1_1.png`, {
+opacity: 0, zIndex: f.time }).addTo(radarMap), time: f.time })); if (radarLayers
+.length) { radarAnimationPosition = d.radar.past.length - 1; updateRadarDisplay(
+); } } }); }
+        function updateRadarDisplay() { radarLayers.forEach((item, i) => item.la
+yer.setOpacity(i === radarAnimationPosition ? 0.7 : 0)); if (radarLayers[radarAn
+imationPosition]) $('#radarTime').text(new Date(radarLayers[radarAnimationPositi
+on].time * 1000).toLocaleString('hu-HU') + (radarAnimationPosition >= radarLayer
+s.length - 12 ? ' (Előrejelzés)' : '')); }
+        function toggleRadarAnimation() { isRadarPlaying = !isRadarPlaying; if (
+isRadarPlaying) { $('#playRadar i').removeClass('fa-play').addClass('fa-pause');
+ animateRadar(); } else { clearTimeout(radarAnimationTimer); $('#playRadar i').r
+emoveClass('fa-pause').addClass('fa-play'); } }
+        function animateRadar() { radarAnimationPosition = (radarAnimationPositi
+on + 1) % radarLayers.length; updateRadarDisplay(); if (isRadarPlaying) radarAni
+mationTimer = setTimeout(animateRadar, 500); }
+        function getEarthquakeData() { $.ajax({ url: `https://earthquake.usgs.go
+v/earthquakes/feed/v1.0/summary/all_day.geojson`, success: function(d) { mostRec
+entEarthquakeTime = d.features.length ? d.features[0].properties.time : Date.now
+(); $('#earthquakeList').html(d.features.slice(0, 15).map(q => `<div class="eart
+hquake-item"><div class="magnitude">M${q.properties.mag.toFixed(1)}</div><div cl
+ass="earthquake-location" title="${q.properties.place}">${q.properties.place}</d
+iv><div class="earthquake-time">${new Date(q.properties.time).toLocaleString('hu
+-HU')}</div></div>`).join('') || '<p style="text-align:center;">Nincs rengés az
+elmúlt 24 órában</p>'); updateEarthquakeTimer(); }, error: () => $('#earthquakeL
+ist').html('<p style="color:red;text-align:center;">Adatok betöltése sikertelen<
+/p>') }); }
+        function updateEarthquakeTimer() { if (earthquakeUpdateTimer) clearInter
+val(earthquakeUpdateTimer); earthquakeUpdateTimer = setInterval(() => { if (most
+RecentEarthquakeTime) { const diff = (Date.now() - mostRecentEarthquakeTime) / 1
+000, h = Math.floor(diff / 3600), m = Math.floor(diff % 3600 / 60); $('#earthqua
+keTimer').text(`${h > 0 ? h + ' óra ' : ''}${m} perc telt el az utolsó rengés ót
+a`); } }, 1000); }
+        function getAuroraForecast() { const baseKp = Math.random() * 4 + 1; let
+ html = ''; for(let i=0; i<8; i++){ const kp = Math.max(0, Math.min(9, baseKp +
+(Math.random() - 0.5) * 2)).toFixed(1); if (i === 0) { $('#kpIndex, #kpValue').t
+ext(kp); $('#auroraIndicator').css('left', `calc(${(kp / 9) * 100}% - 20px)`); $
+('#auroraVisibility').html(calculateAuroraVisibility(kp, userLat)); } const vis
+= calculateAuroraVisibility(kp, userLat); html += `<tr><td>${i===0 ? 'Most' : i*
+3+' óra'}</td><td><strong>${kp}</strong></td><td style="color:${vis.includes('L
+átható') ? '#2ecc71':'#e74c3c'}">${vis.includes('Látható') ? 'Lehetséges':'Nem v
+alószínű'}</td></tr>`; } $('#auroraForecastTable').html(html); $('#auroraLocatio
+n').text(`Helyszín: ${userLocation} (${Math.abs(userLat).toFixed(2)}°${userLat >
+= 0 ? 'É' : 'D'})`); }
+        function calculateAuroraVisibility(kp, lat) { const map = { 0:66.5, 1:64
+.5, 2:62.5, 3:60.5, 4:58.5, 5:56.5, 6:54.5, 7:52.5, 8:50.5, 9:48.5 }; const minL
+at = map[Math.floor(kp)] || 66.5, absLat = Math.abs(lat); if (absLat >= minLat)
+return `<strong style="color:#2ecc71;">Látható lehet!</strong>`; if (absLat >= m
+inLat - 5) return `<strong style="color:#f39c12;">Alacsony esély</strong>`; retu
+rn `<strong style="color:#e74c3c;">Nem látható</strong>`; }
+
+        function initializeAll() {
+            updateTitle(userLocation);
+            $('#currentLocation').text(userLocation);
+            getWeatherData(); renderCalendar();
+            const today = new Date(); currentNotableDate = today;
+            $('#notableDatePicker').val(today.toISOString().split('T')[0]);
+            checkCurrentDayHolidays(new Date(Date.now())); updateAnniversaries(t
+oday);
+            if (radarMap) { radarMap.setView([userLat, userLon], 8); if (current
+LocationMarker) currentLocationMarker.setLatLng([userLat, userLon]); loadRadarLa
+yers(); } else { initRadarMap(); }
+            getEarthquakeData(); getAuroraForecast(); updateMoonPhase();
+        }
+
+        $(document).ready(function() {
+            loadCountries(); setDaytimeColors(); getCurrentLocation();
+            setInterval(updateTime, 1000); setInterval(setDaytimeColors, 60000);
+ setInterval(updateMoonPhase, 300000);
+            setInterval(getEarthquakeData, 300000); setInterval(getAuroraForecas
+t, 600000); setInterval(getWeatherData, 900000);
+            $('#locationInput').keypress(e => { if (e.which == 13) updateLocatio
+n(); });
+            $(window).resize(() => { if (radarMap) radarMap.invalidateSize(true)
+; });
+        });
+        window.onerror = (msg, url, line) => console.error('Hiba:', msg, url, li
+ne);
+    </script>
+</body>
+</html>
